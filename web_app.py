@@ -518,7 +518,26 @@ def note_detail(note_id):
             return [wartosc]
         return dane if isinstance(dane, list) else []
 
+    # Zadania pogrupowane po osobach — jak w notatkach ze spotkań
+    from collections import OrderedDict
+    zadania_wg_osob = OrderedDict()
+    for z in note.zadania:
+        klucz = z.osoba or 'Nieprzypisane'
+        zadania_wg_osob.setdefault(klucz, []).append(z)
+    # nieprzypisane na koniec listy
+    if 'Nieprzypisane' in zadania_wg_osob:
+        zadania_wg_osob['Nieprzypisane'] = zadania_wg_osob.pop('Nieprzypisane')
+
+    bloki_wg_kategorii = []
+    for kat, naglowek in (('postepy', '📈 Postępy'), ('wyzwania', '⚠️ Wyzwania'),
+                          ('kroki', '🎯 Kolejne kroki')):
+        wybrane = [b for b in _sekcja(note.bloki)
+                   if isinstance(b, dict) and b.get('kategoria') == kat]
+        if wybrane:
+            bloki_wg_kategorii.append({'naglowek': naglowek, 'bloki': wybrane})
+
     sekcje = {
+        'uczestnicy': _sekcja(note.uczestnicy),
         'rozmowcy': _sekcja(note.rozmowcy),
         'kluczowe_mysli': _sekcja(note.kluczowe_mysli),
         'decyzje': _sekcja(note.decyzje),
@@ -561,7 +580,9 @@ def note_detail(note_id):
             }
 
     return render_template('note_detail.html', note=note_data, analiza=analiza,
-                           rozmowa=rozmowa, sekcje=sekcje, user=session)
+                           rozmowa=rozmowa, sekcje=sekcje,
+                           bloki=bloki_wg_kategorii, zadania_wg_osob=zadania_wg_osob,
+                           user=session)
 
 
 @app.route('/notes/<int:note_id>/delete', methods=['POST'])
@@ -1050,6 +1071,8 @@ def przetworz_wgrane(job_id, audio_bytes, nazwa, user_id, dostawca):
             kluczowe_mysli=wynik.get('kluczowe_mysli'),
             terminy=wynik.get('terminy'),
             rozmowcy=wynik.get('rozmowcy'),
+            uczestnicy=wynik.get('uczestnicy'),
+            bloki=wynik.get('bloki'),
             decyzje=wynik.get('decyzje'),
             otwarte_watki=wynik.get('otwarte_watki'),
         )

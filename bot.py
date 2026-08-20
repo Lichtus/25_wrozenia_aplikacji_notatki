@@ -352,8 +352,13 @@ def podsumowanie_mowcow(segmenty):
     return "🗣️ *ROZMÓWCY:*\n" + "\n".join(f"• {o}" for o in opisy)
 
 
-def dialog_z_segmentow(segmenty):
-    """Transkrypcja w formie dialogu z podpisanymi wypowiedziami."""
+def dialog_z_segmentow(segmenty, ze_znacznikami=False):
+    """
+    Transkrypcja w formie dialogu z podpisanymi wypowiedziami.
+
+    ze_znacznikami=True dokłada czas rozpoczęcia każdej wypowiedzi — wersja
+    dla GPT, żeby mógł przypisać znacznik czasu do omawianego wątku.
+    """
     if not segmenty:
         return None
 
@@ -366,7 +371,11 @@ def dialog_z_segmentow(segmenty):
         if wiele_czesci and s.get("czesc") != poprzednia_czesc:
             linie.append(f"\n[Część {s['czesc']}]")
             poprzednia_czesc = s.get("czesc")
-        linie.append(f"Rozmówca {s['mowca']}: {s['tekst']}")
+        if ze_znacznikami:
+            sek = int(s.get("start") or 0)
+            linie.append(f"[{sek // 60:02d}:{sek % 60:02d}] Rozmówca {s['mowca']}: {s['tekst']}")
+        else:
+            linie.append(f"Rozmówca {s['mowca']}: {s['tekst']}")
     return "\n".join(linie).strip()
 
 
@@ -446,6 +455,22 @@ def sekcje_notatki(zrodlo, skrocone=False):
                       else getattr(zrodlo, nazwa, None))
 
     czesci = []
+
+    KATEGORIE_BLOKOW = (("postepy", "📈 *POSTĘPY*"),
+                        ("wyzwania", "⚠️ *WYZWANIA*"),
+                        ("kroki", "🎯 *KOLEJNE KROKI*"))
+
+    bloki = pole("bloki")
+    for kat, naglowek in KATEGORIE_BLOKOW:
+        wybrane = [b for b in bloki if isinstance(b, dict) and b.get("kategoria") == kat]
+        if not wybrane:
+            continue
+        linie = []
+        for b in wybrane:
+            czas = f" _{b['czas']}_" if b.get("czas") else ""
+            linie.append(f"*{b.get('tytul', 'Wątek')}*{czas}")
+            linie += [f"  ◦ {pkt}" for pkt in b.get("punkty", [])]
+        czesci.append(naglowek + "\n" + "\n".join(linie))
 
     rozmowcy = pole("rozmowcy")
     if rozmowcy:
@@ -951,7 +976,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # i nie potrafi podsumować wypowiedzi poszczególnych rozmówców.
             tekst_do_analizy = combined_transcription
             if len({(s.get("czesc"), s["mowca"]) for s in wszystkie_segmenty}) > 1:
-                dialog = dialog_z_segmentow(wszystkie_segmenty)
+                dialog = dialog_z_segmentow(wszystkie_segmenty, ze_znacznikami=True)
                 if dialog:
                     tekst_do_analizy = dialog
                     logger.info("Analiza na dialogu z podziałem na mówców")
@@ -991,6 +1016,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pending_notes[user_id]["kluczowe_mysli"] = structure.get("kluczowe_mysli", [])
             pending_notes[user_id]["terminy"] = structure.get("terminy", [])
             pending_notes[user_id]["rozmowcy"] = structure.get("rozmowcy", [])
+            pending_notes[user_id]["uczestnicy"] = structure.get("uczestnicy", [])
+            pending_notes[user_id]["bloki"] = structure.get("bloki", [])
             pending_notes[user_id]["decyzje"] = structure.get("decyzje", [])
             pending_notes[user_id]["otwarte_watki"] = structure.get("otwarte_watki", [])
             pending_notes[user_id]["embedding"] = embedding
@@ -1126,6 +1153,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 kluczowe_mysli=note.get("kluczowe_mysli"),
                 terminy=note.get("terminy"),
                 rozmowcy=note.get("rozmowcy"),
+                uczestnicy=note.get("uczestnicy"),
+                bloki=note.get("bloki"),
                 decyzje=note.get("decyzje"),
                 otwarte_watki=note.get("otwarte_watki"),
                 czy_analizowane=czy_analizowane,
@@ -1227,6 +1256,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 kluczowe_mysli=note.get("kluczowe_mysli"),
                 terminy=note.get("terminy"),
                 rozmowcy=note.get("rozmowcy"),
+                uczestnicy=note.get("uczestnicy"),
+                bloki=note.get("bloki"),
                 decyzje=note.get("decyzje"),
                 otwarte_watki=note.get("otwarte_watki"),
                 czy_analizowane=czy_analizowane,
@@ -1279,6 +1310,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 kluczowe_mysli=note.get("kluczowe_mysli"),
                 terminy=note.get("terminy"),
                 rozmowcy=note.get("rozmowcy"),
+                uczestnicy=note.get("uczestnicy"),
+                bloki=note.get("bloki"),
                 decyzje=note.get("decyzje"),
                 otwarte_watki=note.get("otwarte_watki"),
             )
@@ -2119,6 +2152,20 @@ def sekcje_html(zrodlo):
         return (str(x).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
     html = ""
+    for kat, naglowek in (("postepy", "📈 Postępy"), ("wyzwania", "⚠️ Wyzwania"),
+                          ("kroki", "🎯 Kolejne kroki")):
+        wybrane = [b for b in pole("bloki")
+                   if isinstance(b, dict) and b.get("kategoria") == kat]
+        if not wybrane:
+            continue
+        html += f"<div class='sekcja'><h2>{naglowek}</h2>"
+        for b in wybrane:
+            czas = f" <span class='czas'>{escape(b['czas'])}</span>" if b.get("czas") else ""
+            html += f"<p class='blok-tytul'><strong>{escape(b.get('tytul', 'Wątek'))}</strong>{czas}</p><ul>"
+            html += "".join(f"<li>{escape(pkt)}</li>" for pkt in b.get("punkty", []))
+            html += "</ul>"
+        html += "</div>"
+
     rozmowcy = pole("rozmowcy")
     if rozmowcy:
         html += "<div class='sekcja'><h2>👥 Kto co mówił</h2><ul>"

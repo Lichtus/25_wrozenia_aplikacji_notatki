@@ -270,12 +270,41 @@ class AIProcessor:
             # Sekcje listowe — brak danych ma dawać pustą listę, nie wysypywać
             # zapisu. Model bywa niekonsekwentny, gdy sekcja jest pusta.
             for sekcja in ("kluczowe_mysli", "terminy", "decyzje",
-                           "otwarte_watki", "rozmowcy"):
+                           "otwarte_watki", "rozmowcy", "uczestnicy", "bloki"):
                 if not isinstance(result.get(sekcja), list):
                     result[sekcja] = []
 
             # Bloki tematyczne przychodzą jako {watek, tresc}; starsze notatki
             # mają w tej kolumnie zwykłe napisy, więc oba warianty są poprawne.
+            # Bloki muszą mieć znaną kategorię i choć jeden punkt, inaczej
+            # w interfejsie zostaje pusty nagłówek.
+            result["bloki"] = [
+                b for b in result["bloki"]
+                if isinstance(b, dict) and b.get("punkty")
+                and b.get("kategoria") in ("postepy", "wyzwania", "kroki")
+            ]
+
+            def _pusty(x):
+                return x is None or (isinstance(x, str)
+                                     and x.strip().lower() in ("", "null", "none", "brak"))
+
+            for z in result["zadania"]:
+                if isinstance(z, dict):
+                    if _pusty(z.get("osoba")):
+                        z["osoba"] = None
+                    if _pusty(z.get("czas")):
+                        z["czas"] = None
+
+            for r in result["rozmowcy"]:
+                if isinstance(r, dict) and _pusty(r.get("imie")):
+                    r["imie"] = None
+
+            result["uczestnicy"] = [
+                x for x in result["uczestnicy"]
+                if isinstance(x, str) and not _pusty(x)
+                and not x.startswith("Rozmówca")   # etykieta to nie imię
+            ]
+
             result["rozmowcy"] = [
                 r for r in result["rozmowcy"]
                 if isinstance(r, dict) and r.get("mowca") and r.get("podsumowanie")
@@ -309,7 +338,7 @@ class AIProcessor:
                 f"({result['confidence']:.2f}) | {len(result['zadania'])} zadań, "
                 f"{len(result['kluczowe_mysli'])} wątków, {len(result['decyzje'])} decyzji, "
                 f"{len(result['otwarte_watki'])} otwartych, "
-                f"{len(result['rozmowcy'])} rozmówców"
+                f"{len(result['rozmowcy'])} rozmówców, {len(result['bloki'])} bloków"
             )
             return result, usage
 
@@ -405,7 +434,9 @@ class AIProcessor:
             tekst_do_analizy = transcription
             if len(tr.get("mowcy") or []) > 1 and tr.get("segmenty"):
                 tekst_do_analizy = "\n".join(
-                    f"Rozmówca {s['mowca']}: {s['tekst']}" for s in tr["segmenty"])
+                    f"[{int(s.get('start') or 0)//60:02d}:{int(s.get('start') or 0)%60:02d}] "
+                    f"Rozmówca {s['mowca']}: {s['tekst']}"
+                    for s in tr["segmenty"])
 
             structure, gpt_usage = self.extract_structure(tekst_do_analizy)
 
@@ -443,6 +474,8 @@ class AIProcessor:
                 "zadania": structure["zadania"],
                 "kategoria": structure["kategoria"],
                 "rozmowcy": structure.get("rozmowcy", []),
+                "uczestnicy": structure.get("uczestnicy", []),
+                "bloki": structure.get("bloki", []),
                 "kluczowe_mysli": structure.get("kluczowe_mysli", []),
                 "terminy": structure.get("terminy", []),
                 "decyzje": structure.get("decyzje", []),

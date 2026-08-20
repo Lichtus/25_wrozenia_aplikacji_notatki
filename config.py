@@ -54,13 +54,24 @@ Odpowiedz TYLKO w formacie JSON:
   "kategoria": "Praca/Dom/Inne",
   "confidence": 0.85,
   "opis": "PODSUMOWANIE: 2-3 zwięzłe zdania opisujące główny wątek, cel lub esencję nagrania",
+  "uczestnicy": ["imiona rozpoznane z rozmowy, np. Anna, Marcin; pusta tablica jeśli nikt nie padł z imienia"],
   "rozmowcy": [
-    {{"mowca": "Rozmówca A", "podsumowanie": "co ta osoba wniosła do rozmowy, jej stanowisko i najważniejsze wypowiedzi, 1-2 zdania"}}
+    {{"mowca": "Rozmówca A", "imie": "Marcin lub null jeśli nieznane", "podsumowanie": "co ta osoba wniosła do rozmowy, jej stanowisko i najważniejsze wypowiedzi, 1-2 zdania"}}
+  ],
+  "bloki": [
+    {{"kategoria": "postepy",
+      "tytul": "nazwa omawianego wątku",
+      "czas": "MM:SS — znacznik z transkrypcji, kiedy wątek się zaczyna",
+      "punkty": ["Marcin zauważył, że ... (kto co powiedział, z konkretami)"]}}
   ],
   "kluczowe_mysli": [
     {{"watek": "nazwa poruszonego tematu", "tresc": "najważniejsze spostrzeżenia, omówione fakty lub pomysły w tym wątku"}}
   ],
-  "zadania": ["konkretne działania wynikające z wypowiedzi"],
+  "zadania": [
+    {{"osoba": "imię osoby odpowiedzialnej albo null gdy nie przypisano",
+      "tresc": "konkretne działanie, zrozumiałe samodzielnie",
+      "czas": "MM:SS gdy da się ustalić, inaczej null"}}
+  ],
   "terminy": ["daty, godziny i ustalenia czasowe, które nie są zadaniami"],
   "decyzje": ["decyzje, konkluzje lub definitywne przemyślenia autora"],
   "otwarte_watki": ["luźne koncepcje, wątpliwości, kwestie do sprawdzenia lub przemyślenia w przyszłości"]
@@ -70,6 +81,16 @@ OBJAŚNIENIA SEKCJI:
 - opis = Podsumowanie (Overview), esencja w 2-3 zdaniach
 - rozmowcy = kto co mówił; WYPEŁNIJ TYLKO, gdy transkrypcja ma oznaczonych
   rozmówców (np. "Rozmówca A:"). Dla monologu zwróć pustą tablicę []
+- uczestnicy = imiona padające w rozmowie. Jeśli ktoś zwraca się do kogoś po
+  imieniu, przypisz je do właściwej etykiety w polu "imie". Nie zgaduj.
+- bloki = wątki spotkania, każdy z kategorią, znacznikiem czasu i punktami
+  przypisanymi do osób. Kategorie:
+    "postepy"  - co przeanalizowano, ustalono, jak idzie praca
+    "wyzwania" - problemy, luki, ryzyka, zmiany kierunku
+    "kroki"    - co dalej, plany, nadchodzące etapy
+  WYPEŁNIJ TYLKO dla rozmów wieloosobowych. Dla monologu pusta tablica [] —
+  wtedy treść niosą opis i kluczowe_mysli.
+- zadania = obiekty z osobą odpowiedzialną, treścią i znacznikiem czasu
 - kluczowe_mysli = Główne myśli i tematy, pogrupowane w bloki tematyczne
 - zadania = Zadania i kolejne kroki, każde jako konkretne działanie
 - decyzje = Kluczowe decyzje i wnioski, czyli rzeczy rozstrzygnięte
@@ -104,6 +125,9 @@ WAŻNE:
 - Zadanie to AKCJA do wykonania, nie obserwacja
 - Przy oznaczonych rozmówcach zachowaj ich etykiety dokładnie tak, jak
   występują w transkrypcji
+- Znaczniki czasu bierz z transkrypcji, nie wymyślaj ich
+- W punktach bloków pisz, KTO co powiedział: "Marcin zauważył, że...",
+  "Anna zasugerowała...". Używaj imion, jeśli je znasz, inaczej etykiet
 """
 
 DEEP_ANALYSIS_PROMPT = """Rola: Działaj jako profesjonalny analityk i dokumentator. Twoim zadaniem jest przetworzenie transkrypcji notatki głosowej (lub rozmowy) na ustrukturyzowany raport.
