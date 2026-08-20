@@ -16,6 +16,22 @@ logger = logging.getLogger(__name__)
 # Model dla embeddingów
 EMBEDDING_MODEL = "text-embedding-3-small"
 
+def numeruj_mowcow(segmenty):
+    """
+    Zamienia etykiety dostawcy (A, B, C…) na numery w kolejności pojawienia się.
+
+    Numery są neutralne — nie sugerują imienia ani roli, a przy tym są
+    czytelniejsze niż litery, gdy rozmówców jest kilku.
+    """
+    mapowanie, kolejny = {}, 1
+    for s in segmenty:
+        if s["mowca"] not in mapowanie:
+            mapowanie[s["mowca"]] = str(kolejny)
+            kolejny += 1
+        s["mowca"] = mapowanie[s["mowca"]]
+    return segmenty
+
+
 ASSEMBLYAI_API = "https://api.assemblyai.com/v2"
 ASSEMBLYAI_TIMEOUT_S = 600
 
@@ -117,6 +133,7 @@ class AIProcessor:
             }
             for u in (stan.get("utterances") or [])
         ]
+        numeruj_mowcow(segmenty)
         mowcy = sorted({s["mowca"] for s in segmenty})
         czas = int(round(stan.get("audio_duration") or 0)) or 1
 
@@ -164,6 +181,7 @@ class AIProcessor:
             }
             for s in (odp.segments or [])
         ]
+        numeruj_mowcow(segmenty)
         mowcy = sorted({s["mowca"] for s in segmenty})
 
         uzycie = getattr(odp, "usage", None)
@@ -270,7 +288,7 @@ class AIProcessor:
             # Sekcje listowe — brak danych ma dawać pustą listę, nie wysypywać
             # zapisu. Model bywa niekonsekwentny, gdy sekcja jest pusta.
             for sekcja in ("kluczowe_mysli", "terminy", "decyzje",
-                           "otwarte_watki", "rozmowcy", "uczestnicy", "bloki"):
+                           "otwarte_watki", "rozmowcy", "bloki"):
                 if not isinstance(result.get(sekcja), list):
                     result[sekcja] = []
 
@@ -294,16 +312,6 @@ class AIProcessor:
                         z["osoba"] = None
                     if _pusty(z.get("czas")):
                         z["czas"] = None
-
-            for r in result["rozmowcy"]:
-                if isinstance(r, dict) and _pusty(r.get("imie")):
-                    r["imie"] = None
-
-            result["uczestnicy"] = [
-                x for x in result["uczestnicy"]
-                if isinstance(x, str) and not _pusty(x)
-                and not x.startswith("Rozmówca")   # etykieta to nie imię
-            ]
 
             result["rozmowcy"] = [
                 r for r in result["rozmowcy"]
@@ -474,7 +482,6 @@ class AIProcessor:
                 "zadania": structure["zadania"],
                 "kategoria": structure["kategoria"],
                 "rozmowcy": structure.get("rozmowcy", []),
-                "uczestnicy": structure.get("uczestnicy", []),
                 "bloki": structure.get("bloki", []),
                 "kluczowe_mysli": structure.get("kluczowe_mysli", []),
                 "terminy": structure.get("terminy", []),

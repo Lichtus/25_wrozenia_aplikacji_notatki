@@ -54,21 +54,20 @@ Odpowiedz TYLKO w formacie JSON:
   "kategoria": "Praca/Dom/Inne",
   "confidence": 0.85,
   "opis": "PODSUMOWANIE: 2-3 zwięzłe zdania opisujące główny wątek, cel lub esencję nagrania",
-  "uczestnicy": ["imiona rozpoznane z rozmowy, np. Anna, Marcin; pusta tablica jeśli nikt nie padł z imienia"],
   "rozmowcy": [
-    {{"mowca": "Rozmówca A", "imie": "Marcin lub null jeśli nieznane", "podsumowanie": "co ta osoba wniosła do rozmowy, jej stanowisko i najważniejsze wypowiedzi, 1-2 zdania"}}
+    {{"mowca": "Rozmówca 1", "podsumowanie": "co ta osoba wniosła do rozmowy, jej stanowisko i najważniejsze wypowiedzi, 1-2 zdania"}}
   ],
   "bloki": [
     {{"kategoria": "postepy",
       "tytul": "nazwa omawianego wątku",
       "czas": "MM:SS — znacznik z transkrypcji, kiedy wątek się zaczyna",
-      "punkty": ["Marcin zauważył, że ... (kto co powiedział, z konkretami)"]}}
+      "punkty": ["Rozmówca 1 zauważył, że ... (kto co powiedział, z konkretami)"]}}
   ],
   "kluczowe_mysli": [
     {{"watek": "nazwa poruszonego tematu", "tresc": "najważniejsze spostrzeżenia, omówione fakty lub pomysły w tym wątku"}}
   ],
   "zadania": [
-    {{"osoba": "imię osoby odpowiedzialnej albo null gdy nie przypisano",
+    {{"osoba": "etykieta rozmówcy odpowiedzialnego, np. Rozmówca 2, albo null gdy nie przypisano",
       "tresc": "konkretne działanie, zrozumiałe samodzielnie",
       "czas": "MM:SS gdy da się ustalić, inaczej null"}}
   ],
@@ -81,8 +80,6 @@ OBJAŚNIENIA SEKCJI:
 - opis = Podsumowanie (Overview), esencja w 2-3 zdaniach
 - rozmowcy = kto co mówił; WYPEŁNIJ TYLKO, gdy transkrypcja ma oznaczonych
   rozmówców (np. "Rozmówca A:"). Dla monologu zwróć pustą tablicę []
-- uczestnicy = imiona padające w rozmowie. Jeśli ktoś zwraca się do kogoś po
-  imieniu, przypisz je do właściwej etykiety w polu "imie". Nie zgaduj.
 - bloki = wątki spotkania, każdy z kategorią, znacznikiem czasu i punktami
   przypisanymi do osób. Kategorie:
     "postepy"  - co przeanalizowano, ustalono, jak idzie praca
@@ -126,15 +123,17 @@ WAŻNE:
 - Przy oznaczonych rozmówcach zachowaj ich etykiety dokładnie tak, jak
   występują w transkrypcji
 - Znaczniki czasu bierz z transkrypcji, nie wymyślaj ich
-- W punktach bloków pisz, KTO co powiedział: "Marcin zauważył, że...",
-  "Anna zasugerowała...". Używaj imion, jeśli je znasz, inaczej etykiet
+- W punktach bloków pisz, KTO co powiedział, używając etykiet z transkrypcji:
+  "Rozmówca 1 zauważył, że...", "Rozmówca 2 zasugerowała...".
+  NIE przypisuj imion, nawet jeśli padają w rozmowie — etykiety są neutralne
+  i nie mylą osób
 """
 
 DEEP_ANALYSIS_PROMPT = """Rola: Działaj jako profesjonalny analityk i dokumentator. Twoim zadaniem jest przetworzenie transkrypcji notatki głosowej (lub rozmowy) na ustrukturyzowany raport.
 
 Zadania:
 
-1. Identyfikacja uczestników: Jeśli w tekście występuje więcej niż jedna osoba, zidentyfikuj je i oznacz w tekście (np. Rozmówca A, Rozmówca B). Dla monologu pozostaw pustą tablicę.
+1. Identyfikacja uczestników: Jeśli w tekście występuje więcej niż jedna osoba, zidentyfikuj je i oznacz w tekście (np. Rozmówca 1, Rozmówca 2). Dla monologu pozostaw pustą tablicę.
 
 2. Strukturyzacja treści: Podziel notatkę na logiczne sekcje tematyczne z nagłówkami. Każda sekcja powinna mieć podsumowanie.
 
@@ -152,7 +151,7 @@ Transkrypcja:
 Odpowiedz TYLKO w formacie JSON:
 {{
   "tytul": "Tytuł notatki / Temat spotkania",
-  "uczestnicy": ["Rozmówca A", "Rozmówca B"] lub [],
+  "uczestnicy": ["Rozmówca 1", "Rozmówca 2"] lub [],
   "sekcje": [
     {{
       "naglowek": "Nazwa sekcji tematycznej",

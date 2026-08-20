@@ -537,7 +537,6 @@ def note_detail(note_id):
             bloki_wg_kategorii.append({'naglowek': naglowek, 'bloki': wybrane})
 
     sekcje = {
-        'uczestnicy': _sekcja(note.uczestnicy),
         'rozmowcy': _sekcja(note.rozmowcy),
         'kluczowe_mysli': _sekcja(note.kluczowe_mysli),
         'decyzje': _sekcja(note.decyzje),
@@ -1071,7 +1070,6 @@ def przetworz_wgrane(job_id, audio_bytes, nazwa, user_id, dostawca):
             kluczowe_mysli=wynik.get('kluczowe_mysli'),
             terminy=wynik.get('terminy'),
             rozmowcy=wynik.get('rozmowcy'),
-            uczestnicy=wynik.get('uczestnicy'),
             bloki=wynik.get('bloki'),
             decyzje=wynik.get('decyzje'),
             otwarte_watki=wynik.get('otwarte_watki'),

@@ -1016,7 +1016,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pending_notes[user_id]["kluczowe_mysli"] = structure.get("kluczowe_mysli", [])
             pending_notes[user_id]["terminy"] = structure.get("terminy", [])
             pending_notes[user_id]["rozmowcy"] = structure.get("rozmowcy", [])
-            pending_notes[user_id]["uczestnicy"] = structure.get("uczestnicy", [])
             pending_notes[user_id]["bloki"] = structure.get("bloki", [])
             pending_notes[user_id]["decyzje"] = structure.get("decyzje", [])
             pending_notes[user_id]["otwarte_watki"] = structure.get("otwarte_watki", [])
@@ -1153,7 +1152,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 kluczowe_mysli=note.get("kluczowe_mysli"),
                 terminy=note.get("terminy"),
                 rozmowcy=note.get("rozmowcy"),
-                uczestnicy=note.get("uczestnicy"),
                 bloki=note.get("bloki"),
                 decyzje=note.get("decyzje"),
                 otwarte_watki=note.get("otwarte_watki"),
@@ -1256,7 +1254,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 kluczowe_mysli=note.get("kluczowe_mysli"),
                 terminy=note.get("terminy"),
                 rozmowcy=note.get("rozmowcy"),
-                uczestnicy=note.get("uczestnicy"),
                 bloki=note.get("bloki"),
                 decyzje=note.get("decyzje"),
                 otwarte_watki=note.get("otwarte_watki"),
@@ -1310,7 +1307,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 kluczowe_mysli=note.get("kluczowe_mysli"),
                 terminy=note.get("terminy"),
                 rozmowcy=note.get("rozmowcy"),
-                uczestnicy=note.get("uczestnicy"),
                 bloki=note.get("bloki"),
                 decyzje=note.get("decyzje"),
                 otwarte_watki=note.get("otwarte_watki"),
