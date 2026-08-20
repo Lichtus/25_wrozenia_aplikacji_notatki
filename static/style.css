@@ -1425,3 +1425,38 @@ footer p {
 .summary-list strong {
     font-weight: 600;
 }
+
+/* ---- Zwijane sekcje (transkrypcje) ---- */
+.zwijane > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 6px 0;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.zwijane > summary::-webkit-details-marker { display: none; }
+
+.zwijane > summary::before {
+    content: "▸";
+    display: inline-block;
+    transition: transform .15s ease;
+    opacity: .6;
+}
+
+.zwijane[open] > summary::before { transform: rotate(90deg); }
+
+.zwijane-info {
+    font-size: 13px;
+    opacity: .6;
+    font-weight: 400;
+}
+
+.zwijane > summary h2 { margin: 0; }
+
+.zwijane[open] > .dialogue,
+.zwijane[open] > .transcription {
+    margin-top: 14px;
+}

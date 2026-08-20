@@ -243,7 +243,10 @@
                     {% endfor %}
                 </div>
 
-                <h2 style="margin-top:24px;">💬 Zapis rozmowy</h2>
+                <details class="zwijane" style="margin-top:24px;">
+                <summary><h2 style="display:inline;">💬 Zapis rozmowy</h2>
+                    <span class="zwijane-info">{{ rozmowa.segmenty|length }} wypowiedzi — kliknij, aby rozwinąć</span>
+                </summary>
                 <div class="dialogue">
                     {% set ns = namespace(czesc=None) %}
                     {% for s in rozmowa.segmenty %}
@@ -258,16 +261,21 @@
                         </div>
                     {% endfor %}
                 </div>
+                </details>
             </section>
             {% endif %}
 
             <!-- Transkrypcja -->
             {% if note.transkrypcja %}
             <section class="section">
-                <h2>🎤 {{ 'Pełna transkrypcja' if rozmowa else 'Transkrypcja audio' }}</h2>
-                <div class="transcription">
-                    {{ note.transkrypcja }}
-                </div>
+                <details class="zwijane">
+                    <summary><h2 style="display:inline;">🎤 {{ 'Pełna transkrypcja' if rozmowa else 'Transkrypcja audio' }}</h2>
+                        <span class="zwijane-info">{{ note.transkrypcja|length }} znaków — kliknij, aby rozwinąć</span>
+                    </summary>
+                    <div class="transcription">
+                        {{ note.transkrypcja }}
+                    </div>
+                </details>
             </section>
             {% endif %}
 
