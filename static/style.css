@@ -1483,3 +1483,45 @@ footer p {
     flex-wrap: wrap;
     margin: 24px 0 12px;
 }
+
+/* ---- Nagrywanie mikrofonem ---- */
+.rec-panel {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+
+.rec-czas {
+    font-variant-numeric: tabular-nums;
+    font-size: 20px;
+    font-weight: 600;
+    min-width: 68px;
+}
+
+.rec-poziom {
+    flex: 1;
+    min-width: 120px;
+    height: 8px;
+    border-radius: 99px;
+    background: rgba(128, 128, 128, .22);
+    overflow: hidden;
+}
+
+.rec-slupek {
+    height: 100%;
+    width: 0%;
+    border-radius: 99px;
+    background: #2a7f7a;
+    transition: width .08s linear;
+}
+
+.rec-status {
+    margin-top: 12px;
+    font-size: 14px;
+    opacity: .75;
+    min-height: 20px;
+}
+
+button:disabled { opacity: .45; cursor: not-allowed; }

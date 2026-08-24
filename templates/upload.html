@@ -19,6 +19,23 @@
         </div>
         {% endif %}
 
+        <div class="card" style="padding:24px;margin-bottom:20px;">
+            <h2 style="margin-top:0;">🎙️ Nagraj mikrofonem</h2>
+            <p style="opacity:.8;">Nagranie trafia prosto do przetwarzania, bez zapisywania pliku na dysku.</p>
+
+            <div id="rec-blad" class="alert alert-error" style="display:none;border-left:4px solid #c0392b;padding:12px 16px;margin:14px 0;"></div>
+
+            <div class="rec-panel">
+                <button type="button" id="rec-start" class="btn btn-primary">● Nagrywaj</button>
+                <button type="button" id="rec-stop" class="btn" disabled>■ Zakończ i wyślij</button>
+                <span id="rec-czas" class="rec-czas">00:00</span>
+                <div class="rec-poziom" title="Poziom sygnału z mikrofonu">
+                    <div id="rec-slupek" class="rec-slupek"></div>
+                </div>
+            </div>
+            <p id="rec-status" class="rec-status"></p>
+        </div>
+
         <div class="card" style="padding:24px;">
             <p>Plik trafia prosto do transkrypcji — z pominięciem Telegrama,
                więc nie obowiązuje jego limit 20&nbsp;MB. Nagranie zostanie
@@ -37,5 +54,124 @@
             </p>
         </div>
     </div>
+
+<script>
+(function () {
+    const start = document.getElementById('rec-start');
+    const stop = document.getElementById('rec-stop');
+    const czasEl = document.getElementById('rec-czas');
+    const statusEl = document.getElementById('rec-status');
+    const bladEl = document.getElementById('rec-blad');
+    const slupek = document.getElementById('rec-slupek');
+
+    let rec, fragmenty = [], strumien, ctx, licznik, sekundy = 0, wysylanie = false;
+
+    function pokazBlad(tekst) {
+        bladEl.textContent = '❌ ' + tekst;
+        bladEl.style.display = 'block';
+    }
+
+    function format(s) {
+        return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    }
+
+    // Wskaźnik poziomu — od razu widać, czy mikrofon w ogóle coś łapie.
+    function podepnijPoziom(strumien) {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const analiza = ctx.createAnalyser();
+        analiza.fftSize = 512;
+        ctx.createMediaStreamSource(strumien).connect(analiza);
+        const dane = new Uint8Array(analiza.frequencyBinCount);
+        (function rysuj() {
+            if (!rec || rec.state === 'inactive') return;
+            analiza.getByteTimeDomainData(dane);
+            let szczyt = 0;
+            for (const v of dane) szczyt = Math.max(szczyt, Math.abs(v - 128));
+            slupek.style.width = Math.min(100, (szczyt / 128) * 180) + '%';
+            requestAnimationFrame(rysuj);
+        })();
+    }
+
+    start.addEventListener('click', async function () {
+        bladEl.style.display = 'none';
+        if (!navigator.mediaDevices || !window.MediaRecorder) {
+            return pokazBlad('Ta przeglądarka nie obsługuje nagrywania.');
+        }
+        try {
+            strumien = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true }
+            });
+        } catch (e) {
+            return pokazBlad(e.name === 'NotAllowedError'
+                ? 'Brak zgody na dostęp do mikrofonu. Zezwól w ustawieniach przeglądarki.'
+                : 'Nie udało się uruchomić mikrofonu: ' + e.message);
+        }
+
+        const typ = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus' : 'audio/webm';
+        // 32 kbps wystarcza dla mowy, a godzina mieści się w limicie 100 MB
+        rec = new MediaRecorder(strumien, { mimeType: typ, audioBitsPerSecond: 32000 });
+        fragmenty = [];
+        rec.ondataavailable = e => { if (e.data.size) fragmenty.push(e.data); };
+        rec.onstop = wyslij;
+        rec.start(1000);
+
+        podepnijPoziom(strumien);
+        sekundy = 0;
+        czasEl.textContent = '00:00';
+        licznik = setInterval(() => { czasEl.textContent = format(++sekundy); }, 1000);
+
+        start.disabled = true;
+        stop.disabled = false;
+        statusEl.textContent = 'Nagrywanie w toku — nie zamykaj tej karty.';
+    });
+
+    stop.addEventListener('click', function () {
+        stop.disabled = true;
+        statusEl.textContent = 'Kończę nagranie…';
+        rec.stop();
+        strumien.getTracks().forEach(t => t.stop());
+        if (ctx) ctx.close();
+        clearInterval(licznik);
+        slupek.style.width = '0%';
+    });
+
+    async function wyslij() {
+        const blob = new Blob(fragmenty, { type: 'audio/webm' });
+        if (blob.size < 1000) {
+            start.disabled = false;
+            statusEl.textContent = '';
+            return pokazBlad('Nagranie jest puste — sprawdź, czy mikrofon działa.');
+        }
+        const teraz = new Date();
+        const stempel = teraz.toISOString().slice(0, 16).replace(/[-:T]/g, '');
+        const dane = new FormData();
+        dane.append('audio', blob, 'nagranie_' + stempel + '.webm');
+
+        wysylanie = true;
+        statusEl.textContent = 'Wysyłam ' + Math.round(blob.size / 1024) + ' KB…';
+        try {
+            const odp = await fetch(window.location.pathname, { method: 'POST', body: dane });
+            wysylanie = false;
+            if (odp.redirected) return window.location = odp.url;
+            if (!odp.ok) throw new Error('serwer odpowiedział ' + odp.status);
+            window.location.reload();
+        } catch (e) {
+            wysylanie = false;
+            start.disabled = false;
+            statusEl.textContent = '';
+            pokazBlad('Nie udało się wysłać nagrania: ' + e.message);
+        }
+    }
+
+    // Zamknięcie karty w trakcie kosztuje całe nagranie — ostrzegamy.
+    window.addEventListener('beforeunload', function (e) {
+        if ((rec && rec.state === 'recording') || wysylanie) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+})();
+</script>
 </body>
 </html>
