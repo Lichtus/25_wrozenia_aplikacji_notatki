@@ -1475,3 +1475,11 @@ footer p {
     opacity: .55;
     margin-left: 8px;
 }
+
+/* ---- Przyciski eksportu raportu ---- */
+.eksporty {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 24px 0 12px;
+}

@@ -878,6 +878,49 @@ def generate_email_html(note, base_url=None):
     return html
 
 
+@app.route('/notes/<int:note_id>/markdown')
+@login_required
+def note_markdown(note_id):
+    """Raport w Markdownie — do pobrania jako plik .md."""
+    from database import Notatka
+    from raport import markdown_notatki
+
+    note = db.session.query(Notatka).filter_by(
+        id=note_id, telegram_user_id=biezacy_user_id()).first()
+    if not note:
+        return "Notatka nie znaleziona", 404
+
+    tresc = markdown_notatki(note, note.data_utworzenia.strftime('%Y-%m-%d %H:%M'))
+    nazwa = f"notatka_{note.id}.md"
+    return Response(tresc, mimetype='text/markdown',
+                    headers={'Content-Disposition': f'attachment; filename="{nazwa}"'})
+
+
+@app.route('/notes/<int:note_id>/pdf')
+@login_required
+def note_pdf(note_id):
+    """Ten sam raport co w Markdownie, wyrenderowany do PDF."""
+    from database import Notatka
+    from raport import html_notatki
+
+    note = db.session.query(Notatka).filter_by(
+        id=note_id, telegram_user_id=biezacy_user_id()).first()
+    if not note:
+        return "Notatka nie znaleziona", 404
+
+    try:
+        from weasyprint import HTML
+    except ImportError:
+        logger.error("WeasyPrint niedostępny w tym obrazie")
+        return "Generowanie PDF niedostępne", 501
+
+    html = html_notatki(note, note.data_utworzenia.strftime('%Y-%m-%d %H:%M'))
+    pdf = HTML(string=html).write_pdf()
+    nazwa = f"notatka_{note.id}.pdf"
+    return Response(pdf, mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename="{nazwa}"'})
+
+
 @app.route('/notes/<int:note_id>/email')
 @login_required
 def prepare_email(note_id):

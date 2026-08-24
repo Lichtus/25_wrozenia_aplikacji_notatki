@@ -50,6 +50,18 @@ CMD ["python", "bot.py"]
 # ---------- aplikacja webowa ----------
 FROM base AS web
 
+# Te same biblioteki co w bocie — aplikacja webowa też generuje PDF-y
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libharfbuzz0b \
+        libgdk-pixbuf-2.0-0 \
+        libffi8 \
+        shared-mime-info \
+        fonts-dejavu-core \
+        fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements-web.txt ./
 RUN pip install -r requirements-web.txt
 

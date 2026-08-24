@@ -23,7 +23,11 @@
 
         <header>
             <div class="header-top">
-                <a href="{{ url_for('notes_list') }}" class="back-link">← Powrót do listy</a>
+                <div class="eksporty">
+                <a href="{{ url_for('note_pdf', note_id=note.id) }}" class="btn">📄 Pobierz PDF</a>
+                <a href="{{ url_for('note_markdown', note_id=note.id) }}" class="btn">📝 Pobierz Markdown</a>
+            </div>
+            <a href="{{ url_for('notes_list') }}" class="back-link">← Powrót do listy</a>
                 <div class="header-actions">
                     <a href="{{ url_for('prepare_email', note_id=note.id) }}" class="btn btn-email" title="Wyślij mailem">
                         📧 Wyślij mailem
