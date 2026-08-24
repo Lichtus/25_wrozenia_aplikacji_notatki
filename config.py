@@ -106,6 +106,22 @@ DOPRECYZOWANIE TREŚCI:
 - Zachowaj wszystkie konkrety, które padły: kwoty, procenty, terminy, nazwy,
   liczby, powody opóźnień. To one najczęściej giną przy streszczaniu.
 
+PROPORCJONALNOŚĆ — NAJWAŻNIEJSZA ZASADA:
+- Długość notatki ma odpowiadać ilości treści w nagraniu. Z dwóch zdań nie da
+  się zrobić raportu i NIE WOLNO próbować.
+- Krótkie nagranie (kilka zdań, jedna sprawa) → wypełnij TYLKO opis i zadania.
+  Wszystkie pozostałe sekcje zostaw puste: []. To jest poprawna odpowiedź,
+  a nie brak staranności.
+- Sekcję wypełniaj tylko wtedy, gdy masz do niej treść, która NIE PADŁA już
+  w innej sekcji. Pusta sekcja jest lepsza niż powtórzenie.
+
+ZAKAZ POWTÓRZEŃ:
+- Ta sama informacja nie może wystąpić w dwóch sekcjach. Jeśli coś jest
+  w zadaniach, nie powtarzaj tego w decyzjach ani w kluczowych myślach.
+  Jeśli opis mówi "spotkanie przełożone na czwartek", to NIE jest ani decyzja,
+  ani termin do osobnego wypisania — to już zostało powiedziane.
+- Nie parafrazuj opisu w innych sekcjach innymi słowami.
+
 OGRANICZENIE:
 - Nie rozwlekaj i nie dodawaj zdań, które nic nie wnoszą. Nie uzupełniaj
   informacji, których nie ma w transkrypcji — lepiej krótko niż zmyślone.
