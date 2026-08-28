@@ -41,9 +41,29 @@ Twoim zadaniem jest przetworzenie poniższej transkrypcji (może to być dialog 
 ZASADY:
 1. Pomiń wtrącenia, powtórzenia, zacięcia językowe i nieistotny small talk.
 2. Zachowaj esencję, fakty, liczby, pomysły i kontekst wypowiedzi.
-3. Dopasuj formę sekcji do typu nagrania (dialog vs. jednoosobowa notatka).
+3. Dopasuj formę sekcji do typu nagrania — patrz WYBÓR TRYBU niżej.
 4. Nie wymyślaj informacji, których nie ma w tekście.
 5. Pisz z perspektywy autora notatki — nie "użytkownik powiedział", tylko wprost o rzeczy.
+
+WYBÓR TRYBU — ZRÓB TO NAJPIERW:
+Sprawdź, czy transkrypcja ma oznaczonych rozmówców (np. "Rozmówca 1:").
+
+A) ROZMOWA WIELOOSOBOWA → treść niosą "bloki" i "rozmowcy".
+   Pole "kluczowe_mysli" MUSI być puste: []. Bez wyjątków.
+   Powód: "bloki" tną materiał wg wątku, "rozmowcy" wg osoby. Trzecie
+   cięcie wg tematu opisywałoby po raz trzeci to samo.
+
+B) MONOLOG (jeden mówca albo brak oznaczeń) → treść niesie "opis"
+   i "kluczowe_mysli". Pola "bloki" i "rozmowcy" MUSZĄ być puste: [].
+   "kluczowe_mysli" to w tym trybie GŁÓWNY nośnik treści, nie dodatek.
+   Jeśli w nagraniu jest jakiekolwiek rozumowanie — powody, liczby,
+   porównania, doświadczenia z przeszłości, argumenty za i przeciw —
+   MUSI się tam znaleźć. "opis" to tylko 2-3 zdania streszczenia i z
+   natury gubi te szczegóły, więc nie jest powtórzeniem.
+   Puste [] zostaw wyłącznie wtedy, gdy nagranie to jedna-dwie sprawy
+   podane bez żadnego uzasadnienia.
+
+Nigdy nie wypełniaj obu zestawów naraz.
 
 TRANSKRYPCJA:
 "{transcription}"
@@ -55,7 +75,7 @@ Odpowiedz TYLKO w formacie JSON:
   "confidence": 0.85,
   "opis": "PODSUMOWANIE: 2-3 zwięzłe zdania opisujące główny wątek, cel lub esencję nagrania",
   "rozmowcy": [
-    {{"mowca": "Rozmówca 1", "podsumowanie": "co ta osoba wniosła do rozmowy, jej stanowisko i najważniejsze wypowiedzi, 1-2 zdania"}}
+    {{"mowca": "Rozmówca 1", "podsumowanie": "co ta osoba wniosła do rozmowy, jej stanowisko i najważniejsze wypowiedzi, 1-2 zdania. NIE zaczynaj od etykiety — interfejs drukuje ją sam. Źle: 'Rozmówca 1 podkreślił...'. Dobrze: 'Podkreślił...'"}}
   ],
   "bloki": [
     {{"kategoria": "postepy",
@@ -73,25 +93,32 @@ Odpowiedz TYLKO w formacie JSON:
   ],
   "terminy": ["daty, godziny i ustalenia czasowe, które nie są zadaniami"],
   "decyzje": ["decyzje, konkluzje lub definitywne przemyślenia autora"],
-  "otwarte_watki": ["luźne koncepcje, wątpliwości, kwestie do sprawdzenia lub przemyślenia w przyszłości"]
+  "otwarte_watki": ["pytanie lub wątpliwość, która PADŁA w nagraniu i została bez odpowiedzi — nie twoje pytania do tematu"]
 }}
 
 OBJAŚNIENIA SEKCJI:
 - opis = Podsumowanie (Overview), esencja w 2-3 zdaniach
-- rozmowcy = kto co mówił; WYPEŁNIJ TYLKO, gdy transkrypcja ma oznaczonych
-  rozmówców (np. "Rozmówca A:"). Dla monologu zwróć pustą tablicę []
+- rozmowcy = kto co mówił; tylko tryb A. W trybie B pusta tablica []
 - bloki = wątki spotkania, każdy z kategorią, znacznikiem czasu i punktami
   przypisanymi do osób. Kategorie:
     "postepy"  - co przeanalizowano, ustalono, jak idzie praca
     "wyzwania" - problemy, luki, ryzyka, zmiany kierunku
     "kroki"    - co dalej, plany, nadchodzące etapy
-  WYPEŁNIJ TYLKO dla rozmów wieloosobowych. Dla monologu pusta tablica [] —
-  wtedy treść niosą opis i kluczowe_mysli.
+  Tylko tryb A. W trybie B pusta tablica [].
 - zadania = obiekty z osobą odpowiedzialną, treścią i znacznikiem czasu
-- kluczowe_mysli = Główne myśli i tematy, pogrupowane w bloki tematyczne
+- kluczowe_mysli = Główne myśli i tematy, pogrupowane w bloki tematyczne —
+  powody, liczby, argumenty za i przeciw, porównania, doświadczenia z
+  przeszłości. W trybie B to główny nośnik treści. W trybie A: []
 - zadania = Zadania i kolejne kroki, każde jako konkretne działanie
-- decyzje = Kluczowe decyzje i wnioski, czyli rzeczy rozstrzygnięte
-- otwarte_watki = Otwarte wątki i pomysły, czyli rzeczy nierozstrzygnięte
+- decyzje = rzeczy ROZSTRZYGNIĘTE. NIE wpisuj tu ustaleń, które są już
+  zadaniem albo blokiem o kategorii "kroki". Jeśli "PM zwołuje kick-off"
+  jest zadaniem, to nie jest osobną decyzją.
+  Wahanie się NIE jest decyzją: "rozważam X", "zastanawiam się, czy X",
+  "chyba zrobimy X" to kluczowe_mysli (tryb B) albo blok "wyzwania"
+  (tryb A). Do decyzji trafia tylko to, co zapadło
+- otwarte_watki = pytania i wątpliwości, które PADŁY W NAGRANIU jako
+  nierozstrzygnięte. Nie formułuj własnych pytań do tematu ani sugestii,
+  co warto byłoby jeszcze przemyśleć — to jest wymyślanie treści
 
 DOPRECYZOWANIE TREŚCI:
 - Każde zadanie musi być zrozumiałe SAMODZIELNIE, bez czytania reszty notatki.
@@ -109,7 +136,8 @@ DOPRECYZOWANIE TREŚCI:
 PROPORCJONALNOŚĆ — NAJWAŻNIEJSZA ZASADA:
 - Długość notatki ma odpowiadać ilości treści w nagraniu. Z dwóch zdań nie da
   się zrobić raportu i NIE WOLNO próbować.
-- Krótkie nagranie (kilka zdań, jedna sprawa) → wypełnij TYLKO opis i zadania.
+- Bardzo krótkie nagranie (1-3 zdania, jedna sprawa, zero uzasadnienia) →
+  wypełnij TYLKO opis i zadania.
   Wszystkie pozostałe sekcje zostaw puste: []. To jest poprawna odpowiedź,
   a nie brak staranności.
 - Sekcję wypełniaj tylko wtedy, gdy masz do niej treść, która NIE PADŁA już
@@ -134,7 +162,9 @@ KATEGORIE:
 WAŻNE:
 - Jeśli brak danych w danej sekcji → pusta tablica: []
 - Confidence to liczba 0-1 (pewność klasyfikacji kategorii)
-- Rozróżniaj: decyzje = rozstrzygnięte, otwarte_watki = do rozstrzygnięcia
+- Rozróżniaj: decyzje = rozstrzygnięte w nagraniu, otwarte_watki = zawisło
+  w nagraniu bez odpowiedzi. Obie sekcje opisują to, co PADŁO — nie to, co
+  dałoby się jeszcze zapytać
 - Zadanie to AKCJA do wykonania, nie obserwacja
 - Przy oznaczonych rozmówcach zachowaj ich etykiety dokładnie tak, jak
   występują w transkrypcji
@@ -145,49 +175,7 @@ WAŻNE:
   i nie mylą osób
 """
 
-DEEP_ANALYSIS_PROMPT = """Rola: Działaj jako profesjonalny analityk i dokumentator. Twoim zadaniem jest przetworzenie transkrypcji notatki głosowej (lub rozmowy) na ustrukturyzowany raport.
 
-Zadania:
-
-1. Identyfikacja uczestników: Jeśli w tekście występuje więcej niż jedna osoba, zidentyfikuj je i oznacz w tekście (np. Rozmówca 1, Rozmówca 2). Dla monologu pozostaw pustą tablicę.
-
-2. Strukturyzacja treści: Podziel notatkę na logiczne sekcje tematyczne z nagłówkami. Każda sekcja powinna mieć podsumowanie.
-
-3. Cytaty: W kluczowych punktach analizy przytocz dosłowne, ważne cytaty z transkrypcji (maksymalnie 3-4 na sekcję).
-
-4. Chronologia wydarzeń: Wyodrębnij wszystkie daty i ramy czasowe pojawiające się w tekście.
-
-5. Ustalenia: Zidentyfikuj konkretne ustalenia, decyzje i wnioski.
-
-6. Podsumowanie: Na końcu przygotuj sekcję "Kluczowe Daty i Terminy" zbierając wszystkie terminy w jednym miejscu.
-
-Transkrypcja:
-"{transcription}"
-
-Odpowiedz TYLKO w formacie JSON:
-{{
-  "tytul": "Tytuł notatki / Temat spotkania",
-  "uczestnicy": ["Rozmówca 1", "Rozmówca 2"] lub [],
-  "sekcje": [
-    {{
-      "naglowek": "Nazwa sekcji tematycznej",
-      "tresc": "Podsumowanie sekcji",
-      "cytaty": ["dosłowny cytat 1", "dosłowny cytat 2"]
-    }}
-  ],
-  "ustalenia": ["lista osiągniętych ustaleń i wniosków"],
-  "daty_chronologicznie": [
-    {{"data": "YYYY-MM-DD", "wydarzenie": "Opis wydarzenia"}}
-  ],
-  "kluczowe_daty_podsumowanie": "Podsumowanie wszystkich terminów w jednym miejscu"
-}}
-
-WAŻNE:
-- Uczestnicy pusta tablica [] dla monologu
-- Sekcje muszą mieć: naglowek, tresc, cytaty (tablica)
-- Daty w formacie YYYY-MM-DD lub YYYY-MM-DD HH:MM
-- Cytaty dokładnie z tekstu, skróć do max 150 znaków każdy
-"""
 
 def validate_config():
     """Sprawdza czy wszystkie wymagane zmienne są ustawione"""

@@ -9,7 +9,7 @@ from io import BytesIO
 from openai import OpenAI
 from config import (OPENAI_API_KEY, TRANSCRIPTION_PROVIDER, TRANSCRIPTION_MODEL,
                     WHISPER_MODEL, GPT_MODEL, ASSEMBLYAI_API_KEY,
-                    ASSEMBLYAI_LANGUAGE, EXTRACTION_PROMPT, DEEP_ANALYSIS_PROMPT)
+                    ASSEMBLYAI_LANGUAGE, EXTRACTION_PROMPT)
 
 logger = logging.getLogger(__name__)
 
@@ -221,12 +221,15 @@ class AIProcessor:
             "dostawca": "whisper",
         }
 
-    def extract_structure(self, transcription):
+    def extract_structure(self, transcription, wieloosobowa=False):
         """
         Wyciąga strukturę (temat, opis, zadania) z transkrypcji używając GPT-4o-mini
 
         Args:
             transcription: Tekst transkrypcji
+            wieloosobowa: True, gdy transkrypcja jest dialogiem z etykietami
+                mówców. Decyduje o tym, które sekcje mają zostać wypełnione —
+                patrz "tryb" w EXTRACTION_PROMPT.
 
         Returns:
             tuple: (result_dict, usage_dict)
@@ -322,6 +325,18 @@ class AIProcessor:
                 m for m in result["kluczowe_mysli"]
                 if isinstance(m, str) or (isinstance(m, dict) and m.get("tresc"))
             ]
+
+            # Wymuszenie rozłącznych trybów. Prompt o to prosi, ale model
+            # potrafi wypełnić oba zestawy naraz — i wtedy ta sama treść
+            # wraca w trzech przekrojach (wg wątku, wg osoby, wg tematu).
+            # Tryb znamy z transkrypcji, więc rozstrzygamy go tutaj.
+            if wieloosobowa:
+                result["kluczowe_mysli"] = []
+            else:
+                if result["bloki"] or result["rozmowcy"]:
+                    logger.info("Monolog — pomijam bloki i rozmówców z odpowiedzi GPT")
+                result["bloki"] = []
+                result["rozmowcy"] = []
 
             # Walidacja kategorii
             allowed_categories = ["Praca", "Dom", "Inne"]
@@ -440,13 +455,15 @@ class AIProcessor:
             # Krok 2: Ekstrakcja struktury (ze smart klasyfikacją)
             # Analiza dostaje dialog z etykietami, gdy rozpoznano wielu mówców
             tekst_do_analizy = transcription
-            if len(tr.get("mowcy") or []) > 1 and tr.get("segmenty"):
+            wieloosobowa = len(tr.get("mowcy") or []) > 1 and bool(tr.get("segmenty"))
+            if wieloosobowa:
                 tekst_do_analizy = "\n".join(
                     f"[{int(s.get('start') or 0)//60:02d}:{int(s.get('start') or 0)%60:02d}] "
                     f"Rozmówca {s['mowca']}: {s['tekst']}"
                     for s in tr["segmenty"])
 
-            structure, gpt_usage = self.extract_structure(tekst_do_analizy)
+            structure, gpt_usage = self.extract_structure(tekst_do_analizy,
+                                                          wieloosobowa=wieloosobowa)
 
             # Krok 3: Generowanie embedding dla semantycznego wyszukiwania
             # Używamy kombinacji tematu i opisu dla najlepszego dopasowania
@@ -505,97 +522,4 @@ class AIProcessor:
 
         except Exception as e:
             logger.error(f"Błąd podczas przetwarzania notatki głosowej: {e}")
-            raise
-
-    def analyze_long_note(self, transcription):
-        """
-        Dogłębna analiza długiej notatki z uczestnikami, sekcjami, cytatami i chronologią
-
-        Args:
-            transcription: Pełna transkrypcja notatki
-
-        Returns:
-            tuple: (analysis_dict, usage_dict)
-                - analysis_dict: {
-                    "tytul": str,
-                    "uczestnicy": list[str],
-                    "sekcje": list[dict],
-                    "ustalenia": list[str],
-                    "daty_chronologicznie": list[dict],
-                    "kluczowe_daty_podsumowanie": str
-                }
-                - usage_dict: {
-                    "prompt_tokens": int,
-                    "completion_tokens": int,
-                    "total_tokens": int
-                }
-        """
-        try:
-            logger.info(f"Rozpoczynam dogłębną analizę notatki ({len(transcription)} znaków)")
-
-            prompt = DEEP_ANALYSIS_PROMPT.format(transcription=transcription)
-
-            response = self.client.chat.completions.create(
-                model=GPT_MODEL,
-                messages=[
-                    {"role": "system", "content": "Jesteś profesjonalnym analitykiem i dokumentatorem."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.3
-            )
-
-            content = response.choices[0].message.content
-            usage = response.usage
-
-            result = json.loads(content)
-
-            # Walidacja struktury
-            required_keys = ['tytul', 'uczestnicy', 'sekcje', 'ustalenia', 'daty_chronologicznie', 'kluczowe_daty_podsumowanie']
-            for key in required_keys:
-                if key not in result:
-                    if key in ['uczestnicy', 'ustalenia', 'daty_chronologicznie']:
-                        result[key] = []
-                    else:
-                        result[key] = ""
-
-            # Upewnij się że uczestnicy to lista
-            if not isinstance(result.get("uczestnicy"), list):
-                result["uczestnicy"] = []
-
-            # Upewnij się że sekcje to lista
-            if not isinstance(result.get("sekcje"), list):
-                result["sekcje"] = []
-
-            # Upewnij się że ustalenia to lista
-            if not isinstance(result.get("ustalenia"), list):
-                result["ustalenia"] = []
-
-            # Upewnij się że daty_chronologicznie to lista
-            if not isinstance(result.get("daty_chronologicznie"), list):
-                result["daty_chronologicznie"] = []
-
-            usage_dict = {
-                'prompt_tokens': usage.prompt_tokens,
-                'completion_tokens': usage.completion_tokens,
-                'total_tokens': usage.total_tokens
-            }
-
-            logger.info(f"Analiza zakończona: {len(result.get('sekcje', []))} sekcji, {len(result.get('uczestnicy', []))} uczestników, {usage_dict['total_tokens']} tokenów")
-
-            return result, usage_dict
-
-        except json.JSONDecodeError as e:
-            logger.error(f"Błąd parsowania JSON z analizy: {e}")
-            # Fallback - zwróć pustą strukturę
-            return {
-                "tytul": "",
-                "uczestnicy": [],
-                "sekcje": [],
-                "ustalenia": [],
-                "daty_chronologicznie": [],
-                "kluczowe_daty_podsumowanie": ""
-            }, {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        except Exception as e:
-            logger.error(f"Błąd podczas analizy głębokiej: {e}")
             raise

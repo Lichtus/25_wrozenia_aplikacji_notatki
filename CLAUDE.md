@@ -58,11 +58,25 @@ Photos are never stored locally: only Telegram `file_id`s go in the DB (JSON arr
 
 `process_voice_note()` chains: `transcribe_audio()` (returns `(text, duration_seconds)`) → `extract_structure()` → `get_embedding()` on topic+description, tracking token usage at each step. `cost_calculator.CostCalculator` converts usage to USD.
 
-Two GPT prompts live in `config.py`, both `response_format={"type": "json_object"}`:
-- `EXTRACTION_PROMPT` → `temat`, `opis`, `zadania`, `kluczowe_mysli`, `terminy`, `kategoria`, `confidence`
-- `DEEP_ANALYSIS_PROMPT` → `tytul`, `uczestnicy`, `sekcje` (with `cytaty`), `ustalenia`, `daty_chronologicznie`, `kluczowe_daty_podsumowanie`
+One GPT prompt lives in `config.py`: `EXTRACTION_PROMPT`, with
+`response_format={"type": "json_object"}` → `temat`, `opis`, `kategoria`,
+`confidence`, `zadania`, `bloki`, `rozmowcy`, `kluczowe_mysli`, `terminy`,
+`decyzje`, `otwarte_watki`. It defensively fills missing keys rather than
+raising, so a malformed GPT response degrades instead of failing.
 
-Deep analysis (`analyze_long_note()`) is offered only when total audio exceeds **300 seconds** (`bot.py:762`), via the `ASKING_ANALYSIS` conversation state. Its output lands in the `analiza_*` columns with `czy_analizowane=True`. Both extractors defensively fill missing keys rather than raising, so a malformed GPT response degrades instead of failing.
+**Two mutually exclusive modes.** `bloki` + `rozmowcy` (multi-speaker) and
+`kluczowe_mysli` (monologue) are different cuts of the same material, so
+filling both makes every point appear two or three times. The prompt asks for
+one set, and `extract_structure(transcription, wieloosobowa=...)` **enforces**
+it by clearing the wrong set — the model does not reliably obey the prompt
+alone. Callers already know which mode applies: they build the speaker-labelled
+dialog only when diarization found more than one `(część, mówca)` pair.
+
+The `analiza_*` columns and `czy_analizowane` are a **frozen legacy**: the
+deep-analysis second pass was removed from the bot on 2026-08-26, once
+`EXTRACTION_PROMPT` grew to cover the same ground. Old notes still display
+their analysis in the web app (`web_app.py`); nothing writes those columns any
+more.
 
 ### Audio handling landmine
 
@@ -79,9 +93,9 @@ figure and the 300-second deep-analysis threshold. Telegram supplies the true va
 
 ### Bot conversation flow
 
-States: `COLLECTING_AUDIO, WAITING_CONFIRMATION, EDITING_TEMAT, EDITING_OPIS, WAITING_PHOTOS, ASKING_PDF, EDITING_NOTE, ASKING_ANALYSIS` (`EDITING_OPIS` is declared but not wired into any handler).
+States: `COLLECTING_AUDIO, WAITING_CONFIRMATION, EDITING_TEMAT, EDITING_OPIS, WAITING_PHOTOS, ASKING_PDF, EDITING_NOTE` (`EDITING_OPIS` is declared but not wired into any handler).
 
-Flow: voice/audio → optionally more recordings (combined with `[Część N]` markers) → deep-analysis prompt if >5 min → preview → photos → PDF → save.
+Flow: voice/audio → optionally more recordings (combined with `[Część N]` markers) → preview → photos → PDF → save. Length no longer branches the flow.
 
 Two things to respect when touching `main()`:
 - `edit_note_conv_handler` **must** be registered before the main `conv_handler` — it claims `^edit_note_` callbacks first.
@@ -109,6 +123,14 @@ does is add a column to a table that already exists, so upgrading an older datab
 hand-written `PRAGMA table_info` → conditional `ALTER TABLE ADD COLUMN` script. The historical
 ones live in `archive/`. Adding a column means: update the model, write such a script if any
 live database predates it, and update `add_notatka()`/`update_notatka()` plus the display functions (`show_note_preview()`, `send_full_note()`, `send_full_note_from_callback()`, `generate_pdf()`, and the web templates).
+
+### Task rendering
+
+`zadania` come out of GPT as `{osoba, tresc, czas}` objects. `raport.zadania_wg_osob()`
+is the single grouper for all surfaces — it accepts those dicts, `Zadanie` rows, and
+plain strings from older notes — and `database.zadania_do_modelu()` is the single
+normalizer for both `add_notatka()` and `update_notatka()`. Rendering a task list by
+hand is how raw `{'osoba': ...}` dicts leaked into messages and PDFs before.
 
 ### PDF generation
 

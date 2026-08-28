@@ -40,18 +40,25 @@ def zadania_wg_osob(zadania):
     """
     Grupuje zadania po osobie odpowiedzialnej, nieprzypisane na końcu.
 
-    Przyjmuje wiersze Zadanie z bazy albo słowniki {osoba, tresc, czas}.
+    Przyjmuje wiersze Zadanie z bazy, słowniki {osoba, tresc, czas}
+    oraz zwykłe napisy ze starszych notatek.
+    Wpisy z bazy niosą też "id" — Telegram pokazuje je przy /wykonane.
     """
     grupy = {}
     for z in zadania or []:
         if isinstance(z, dict):
             osoba = z.get("osoba") or "Nieprzypisane"
             wpis = {"tresc": z.get("tresc") or "", "czas": z.get("czas"),
-                    "wykonane": False}
+                    "wykonane": False, "id": None}
+        elif isinstance(z, str):
+            # Starsze notatki i ręczne edycje: zadanie to zwykły napis
+            osoba = "Nieprzypisane"
+            wpis = {"tresc": z.strip(), "czas": None, "wykonane": False, "id": None}
         else:
             osoba = getattr(z, "osoba", None) or "Nieprzypisane"
             wpis = {"tresc": z.zadanie, "czas": getattr(z, "czas_w_nagraniu", None),
-                    "wykonane": bool(getattr(z, "wykonane", False))}
+                    "wykonane": bool(getattr(z, "wykonane", False)),
+                    "id": getattr(z, "id", None)}
         if wpis["tresc"]:
             grupy.setdefault(osoba, []).append(wpis)
 

@@ -21,6 +21,7 @@ from config import (TELEGRAM_BOT_TOKEN, ALLOWED_USER_IDS, TRANSCRIPTION_MODEL,
                     TRANSCRIPTION_PROVIDER, validate_config)
 from database import Database
 from ai_processor import AIProcessor
+from raport import zadania_wg_osob
 
 # Konfiguracja loggera
 logging.basicConfig(
@@ -30,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Stany konwersacji
-COLLECTING_AUDIO, WAITING_CONFIRMATION, EDITING_TEMAT, EDITING_OPIS, WAITING_PHOTOS, ASKING_PDF, EDITING_NOTE, ASKING_ANALYSIS = range(8)
+COLLECTING_AUDIO, WAITING_CONFIRMATION, EDITING_TEMAT, EDITING_OPIS, WAITING_PHOTOS, ASKING_PDF, EDITING_NOTE = range(7)
 
 # Globalne instancje
 db = Database()
@@ -443,6 +444,36 @@ def _lista(wartosc):
     return wartosc if isinstance(wartosc, list) else []
 
 
+def zadania_tekst(zadania, z_id=False):
+    """
+    Zadania do wiadomości Telegrama, pogrupowane po osobie odpowiedzialnej.
+
+    Grupowanie robi raport.zadania_wg_osob — ten sam, z którego korzysta
+    aplikacja webowa i eksporty, więc zadanie wygląda wszędzie tak samo.
+    Przyjmuje słowniki {osoba, tresc, czas} z notatki w trakcie tworzenia
+    i wiersze Zadanie z bazy. z_id dokłada identyfikator do /wykonane.
+    """
+    grupy = zadania_wg_osob(zadania)
+    if not grupy:
+        return "📋 *ZADANIA:* brak"
+
+    # Gdy nikomu nic nie przypisano, nagłówek "Nieprzypisane" jest samym
+    # szumem — zostaje zwykła lista.
+    bez_osob = set(grupy) == {"Nieprzypisane"}
+
+    linie = ["📋 *ZADANIA:*"]
+    for osoba, pozycje in grupy.items():
+        if not bez_osob:
+            linie.append(f"*{osoba}:*")
+        for poz in pozycje:
+            status = "✅" if poz["wykonane"] else "⬜"
+            ident = f" `{poz['id']}`" if z_id and poz["id"] else ""
+            czas = f" _{poz['czas']}_" if poz["czas"] else ""
+            wciecie = "" if bez_osob else "  "
+            linie.append(f"{wciecie}{status}{ident} {poz['tresc']}{czas}")
+    return "\n".join(linie)
+
+
 def sekcje_notatki(zrodlo, skrocone=False):
     """
     Formatuje sekcje podsumowania do wiadomości Telegrama.
@@ -548,13 +579,7 @@ async def show_note_preview(update: Update, user_id: int):
     if not note:
         return
 
-    zadania_text = ""
-    if note["zadania"]:
-        zadania_text = "\n📋 *ZADANIA:*\n"
-        for i, zadanie in enumerate(note["zadania"], 1):
-            zadania_text += f"{i}. {zadanie}\n"
-    else:
-        zadania_text = "\n📋 *ZADANIA:* brak"
+    zadania_text = f"\n{zadania_tekst(note['zadania'])}\n"
 
     # Emoji kategorii
     kategoria_emoji = {
@@ -687,157 +712,6 @@ async def ask_for_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASKING_PDF
 
 
-async def ask_about_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE, duration):
-    """Pyta użytkownika czy przeprowadzić dogłębną analizę"""
-    query = update.callback_query
-
-    # Odpowiedz na callback
-    try:
-        await query.answer()
-    except Exception as e:
-        logger.warning(f"Nie udało się odpowiedzieć na callback: {e}")
-
-    minutes = duration // 60
-    seconds = duration % 60
-
-    keyboard = [
-        [InlineKeyboardButton("✅ Tak, analizuj", callback_data="analysis_yes")],
-        [InlineKeyboardButton("❌ Nie, zapisz normalnie", callback_data="analysis_no")],
-        [InlineKeyboardButton("🗑️ Odrzuć całość", callback_data="cancel")]
-    ]
-
-    # Spróbuj edytować wiadomość
-    try:
-        await query.edit_message_text(
-            f"📊 *Notatka jest długa:* {minutes}m {seconds}s\n\n"
-            "Czy przeprowadzić dogłębną analizę z:\n"
-            "• identyfikacją uczestników\n"
-            "• podziałem na sekcje tematyczne\n"
-            "• kluczowymi cytatami\n"
-            "• chronologią wydarzeń\n"
-            "• listą ustaleń",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        logger.warning(f"Nie udało się edytować wiadomości: {e}")
-        # Jeśli edycja nie zadziałała, wyślij nową wiadomość
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"📊 *Notatka jest długa:* {minutes}m {seconds}s\n\n"
-                 "Czy przeprowadzić dogłębną analizę?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-
-    return ASKING_ANALYSIS
-
-
-async def analyze_deep_yes(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Uruchamia dogłębną analizę notatki"""
-    query = update.callback_query
-    user_id = update.effective_user.id
-
-    # Odpowiedz na callback natychmiast, zanim zacznie się analiza
-    try:
-        await query.answer()
-    except Exception as e:
-        logger.warning(f"Nie udało się odpowiedzieć na callback: {e}")
-
-    # Wyślij nową wiadomość zamiast edytować stare (żeby uniknąć timeout callback)
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text="🔄 *Przeprowadzam dogłębną analizę...*\n\n"
-             "To może chwilę potrwać ⏳",
-        parse_mode='Markdown'
-    )
-
-    transcription = pending_notes[user_id]["transcription"]
-
-    # Uruchom analizę
-    try:
-        analysis, usage = ai.analyze_long_note(transcription)
-
-        if analysis:
-            # Zapisz analizę w pending data
-            pending_notes[user_id]["analysis"] = analysis
-            pending_notes[user_id]["analysis_usage"] = usage
-
-            # Dodaj koszty analizy
-            from cost_calculator import CostCalculator
-            analysis_cost_in, analysis_cost_out, analysis_cost_total = CostCalculator.calculate_gpt_cost(
-                usage['prompt_tokens'],
-                usage['completion_tokens']
-            )
-
-            # Zaktualizuj cost_data
-            current_cost = pending_notes[user_id]["cost_data"]
-            current_cost["tokens_input"] += usage['prompt_tokens']
-            current_cost["tokens_output"] += usage['completion_tokens']
-            current_cost["cost_gpt_input_usd"] += analysis_cost_in
-            current_cost["cost_gpt_output_usd"] += analysis_cost_out
-            current_cost["cost_total_usd"] += analysis_cost_total
-
-            # Zaktualizuj embedding z wynikami analizy dla lepszego wyszukiwania semantycznego
-            structure = pending_notes[user_id]["structure"]
-            section_summaries = " ".join([s['tresc'] for s in analysis.get('sekcje', [])])
-            agreements = " ".join(analysis.get('ustalenia', []))
-            enhanced_embedding_text = f"{structure['temat']}. {structure['opis']}. {section_summaries}. {agreements}"
-            enhanced_embedding, enhanced_tokens = ai.get_embedding(enhanced_embedding_text)
-            pending_notes[user_id]["embedding"] = enhanced_embedding
-
-            # Zaktualizuj koszty embeddingu
-            embedding_cost = CostCalculator.calculate_embedding_cost(enhanced_tokens)
-            current_cost["tokens_embedding"] += enhanced_tokens
-            current_cost["cost_embedding_usd"] += embedding_cost
-            current_cost["cost_total_usd"] += embedding_cost
-
-            # Pokaż zaktualizowany koszt
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"💰 Koszt analizy: {CostCalculator.format_cost_usd(analysis_cost_total)}\n"
-                     f"💰 Koszt łącznie: {CostCalculator.format_cost_usd(current_cost['cost_total_usd'])}",
-                parse_mode='Markdown'
-            )
-
-            # Pokaż podgląd z analizą
-            return await show_note_preview_with_analysis(update, context, user_id)
-        else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ Błąd analizy. Notatka zostanie zapisana bez analizy."
-            )
-            return await analyze_deep_no(update, context)
-
-    except Exception as e:
-        logger.error(f"Błąd podczas analizy: {e}")
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"❌ Wystąpił błąd: {str(e)}\n\nNotatka zostanie zapisana bez analizy."
-        )
-        return await analyze_deep_no(update, context)
-
-
-async def analyze_deep_no(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Pomija analizę i przechodzi do normalnego podglądu"""
-    query = update.callback_query
-    user_id = update.effective_user.id
-
-    # Odpowiedz na callback i zignoruj błędy
-    try:
-        await query.answer()
-    except Exception:
-        pass  # Callback mógł wygasnąć, kontynuujemy
-
-    # Wyczyść dane analizy jeśli były
-    if user_id in pending_notes:
-        if "analysis" in pending_notes[user_id]:
-            del pending_notes[user_id]["analysis"]
-        if "analysis_usage" in pending_notes[user_id]:
-            del pending_notes[user_id]["analysis_usage"]
-
-    # Pokaż normalny podgląd
-    return await show_note_preview_from_callback(update, context, user_id)
 
 
 async def show_note_preview_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id):
@@ -866,46 +740,6 @@ async def show_note_preview_from_callback(update: Update, context: ContextTypes.
     return WAITING_CONFIRMATION
 
 
-async def show_note_preview_with_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id):
-    """Pokazuje podgląd notatki z informacją o analizie"""
-    # Musimy stworzyć "fake" update z message
-    class FakeMessage:
-        def __init__(self, chat_id):
-            self.chat_id = chat_id
-            self.chat = self
-            self.id = chat_id
-
-        async def reply_text(self, text, **kwargs):
-            return await context.bot.send_message(
-                chat_id=self.chat_id,
-                text=text,
-                **kwargs
-            )
-
-    fake_update = type('obj', (object,), {
-        'message': FakeMessage(update.effective_chat.id),
-        'effective_user': update.effective_user
-    })()
-
-    await show_note_preview(fake_update, user_id)
-
-    # Dodaj informację o analizie
-    analysis = pending_notes[user_id]["analysis"]
-    analysis_info = (
-        "\n\n📊 *Notatka przeanalizowana*\n"
-        f"📋 Sekcji: {len(analysis.get('sekcje', []))}\n"
-        f"👥 Uczestników: {len(analysis.get('uczestnicy', []))}\n"
-        f"✅ Ustaleń: {len(analysis.get('ustalenia', []))}\n"
-        f"📅 Dat: {len(analysis.get('daty_chronologicznie', []))}"
-    )
-
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=analysis_info,
-        parse_mode='Markdown'
-    )
-
-    return WAITING_CONFIRMATION
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -975,13 +809,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # więcej niż jedną osobę — bez tego GPT nie wie, kto co powiedział,
             # i nie potrafi podsumować wypowiedzi poszczególnych rozmówców.
             tekst_do_analizy = combined_transcription
+            wieloosobowa = False
             if len({(s.get("czesc"), s["mowca"]) for s in wszystkie_segmenty}) > 1:
                 dialog = dialog_z_segmentow(wszystkie_segmenty, ze_znacznikami=True)
                 if dialog:
                     tekst_do_analizy = dialog
+                    wieloosobowa = True
                     logger.info("Analiza na dialogu z podziałem na mówców")
 
-            structure, gpt_usage = ai.extract_structure(tekst_do_analizy)
+            structure, gpt_usage = ai.extract_structure(tekst_do_analizy,
+                                                        wieloosobowa=wieloosobowa)
 
             # Generowanie embedding
             embedding_text = f"{structure['temat']}. {structure['opis']}"
@@ -1039,51 +876,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown'
             )
 
-            # Sprawdź czy notatka jest długa (>5 minut) - zapytaj o dogłębną analizę
-            if total_duration > 300:  # 5 minut = 300 sekund
-                # Zapisz dane do późniejszego użycia
-                pending_notes[user_id]["transcription"] = combined_transcription
-                pending_notes[user_id]["structure"] = structure
-                pending_notes[user_id]["total_duration"] = total_duration
-                pending_notes[user_id]["gpt_usage"] = gpt_usage
-                pending_notes[user_id]["embedding"] = embedding
-                pending_notes[user_id]["cost_data"] = {
-                    "audio_duration_seconds": total_duration,
-                    "tokens_input": gpt_usage['input_tokens'],
-                    "tokens_output": gpt_usage['output_tokens'],
-                    "tokens_embedding": embedding_tokens,
-                    "cost_whisper_usd": cost_whisper,
-                    "cost_gpt_input_usd": cost_gpt_in,
-                    "cost_gpt_output_usd": cost_gpt_out,
-                    "cost_embedding_usd": cost_embedding,
-                    "cost_total_usd": cost_total
-                }
-
-                return await ask_about_analysis(update, context, total_duration)
-
             # Pokaż podgląd i przejdź do WAITING_CONFIRMATION
-            # Musimy stworzyć "fake" update z message
-            class FakeMessage:
-                def __init__(self, chat_id):
-                    self.chat_id = chat_id
-                    self.chat = self
-                    self.id = chat_id
-
-                async def reply_text(self, text, **kwargs):
-                    return await context.bot.send_message(
-                        chat_id=self.chat_id,
-                        text=text,
-                        **kwargs
-                    )
-
-            fake_update = type('obj', (object,), {
-                'message': FakeMessage(update.effective_chat.id),
-                'effective_user': update.effective_user
-            })()
-
-            await show_note_preview(fake_update, user_id)
-
-            return WAITING_CONFIRMATION
+            return await show_note_preview_from_callback(update, context, user_id)
 
         except Exception as e:
             logger.error(f"Błąd przetwarzania wieloczęściowego audio: {e}")
@@ -1116,14 +910,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Pomiń zdjęcia i przejdź do pytania o PDF
         return await ask_for_pdf(update, context)
 
-    elif action == "analysis_yes":
-        # Uruchom dogłębną analizę
-        return await analyze_deep_yes(update, context)
-
-    elif action == "analysis_no":
-        # Pomiń analizę i zapisz normalnie
-        return await analyze_deep_no(update, context)
-
     elif action == "finish_photos":
         # Zakończ dodawanie zdjęć i przejdź do pytania o PDF
         return await ask_for_pdf(update, context)
@@ -1132,10 +918,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Zapisz notatkę i generuj PDF
         note = pending_notes.get(user_id)
         if note:
-            # Przygotuj dane analizy jeśli istnieją
-            czy_analizowane = "analysis" in note
-            analiza_data = note.get("analysis") if czy_analizowane else None
-
             # Zapisz do bazy
             notatka = db.add_notatka(
                 telegram_user_id=user_id,
@@ -1154,9 +936,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 rozmowcy=note.get("rozmowcy"),
                 bloki=note.get("bloki"),
                 decyzje=note.get("decyzje"),
-                otwarte_watki=note.get("otwarte_watki"),
-                czy_analizowane=czy_analizowane,
-                analiza_data=analiza_data
+                otwarte_watki=note.get("otwarte_watki")
             )
 
             await query.edit_message_text("📝 Zapisuję notatkę i generuję PDF...", parse_mode='Markdown')
@@ -1235,10 +1015,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Zapisz notatkę bez PDF
         note = pending_notes.get(user_id)
         if note:
-            # Przygotuj dane analizy jeśli istnieją
-            czy_analizowane = "analysis" in note
-            analiza_data = note.get("analysis") if czy_analizowane else None
-
             notatka = db.add_notatka(
                 telegram_user_id=user_id,
                 temat=note["temat"],
@@ -1256,9 +1032,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 rozmowcy=note.get("rozmowcy"),
                 bloki=note.get("bloki"),
                 decyzje=note.get("decyzje"),
-                otwarte_watki=note.get("otwarte_watki"),
-                czy_analizowane=czy_analizowane,
-                analiza_data=analiza_data
+                otwarte_watki=note.get("otwarte_watki")
             )
             del pending_notes[user_id]
 
@@ -1943,15 +1717,7 @@ async def send_full_note(update: Update, context: ContextTypes.DEFAULT_TYPE, not
     """Wysyła pełną notatkę z audio i przyciskami"""
     data_str = notatka.data_utworzenia.strftime("%Y-%m-%d %H:%M:%S")
 
-    # Formatuj zadania
-    zadania_text = ""
-    if notatka.zadania:
-        zadania_text = "\n\n📋 *ZADANIA:*\n"
-        for i, zadanie in enumerate(notatka.zadania, 1):
-            status = "✅" if zadanie.wykonane else "⬜"
-            zadania_text += f"{status} `{zadanie.id}`: {zadanie.zadanie}\n"
-    else:
-        zadania_text = "\n\n📋 *ZADANIA:* brak"
+    zadania_text = f"\n\n{zadania_tekst(notatka.zadania, z_id=True)}"
 
     # Główna wiadomość
     message = (
@@ -2006,15 +1772,7 @@ async def send_full_note_from_callback(query, context: ContextTypes.DEFAULT_TYPE
     """Wysyła pełną notatkę z audio - wersja dla callback query"""
     data_str = notatka.data_utworzenia.strftime("%Y-%m-%d %H:%M:%S")
 
-    # Formatuj zadania
-    zadania_text = ""
-    if notatka.zadania:
-        zadania_text = "\n\n📋 *ZADANIA:*\n"
-        for i, zadanie in enumerate(notatka.zadania, 1):
-            status = "✅" if zadanie.wykonane else "⬜"
-            zadania_text += f"{status} `{zadanie.id}`: {zadanie.zadanie}\n"
-    else:
-        zadania_text = "\n\n📋 *ZADANIA:* brak"
+    zadania_text = f"\n\n{zadania_tekst(notatka.zadania, z_id=True)}"
 
     # Główna wiadomość
     message = (
@@ -2130,7 +1888,7 @@ async def generate_pdf_from_db(notatka, context):
         "temat": notatka.temat,
         "opis": notatka.opis,
         "transkrypcja": notatka.transkrypcja,
-        "zadania": [z.zadanie for z in notatka.zadania] if notatka.zadania else [],
+        "zadania": list(notatka.zadania),
         "photos": json.loads(notatka.photo_file_ids) if notatka.photo_file_ids else []
     }
 
@@ -2237,13 +1995,21 @@ async def generate_pdf(note, notatka_id, context):
 
         photos_html += "</div>"
 
-    # Formatuj zadania
+    # Formatuj zadania — pogrupowane po osobie odpowiedzialnej
     zadania_html = ""
-    if note["zadania"]:
-        zadania_html = "<div class='zadania'><h2>📋 Zadania</h2><ul>"
-        for zadanie in note["zadania"]:
-            zadania_html += f"<li>{zadanie}</li>"
-        zadania_html += "</ul></div>"
+    grupy_zadan = zadania_wg_osob(note["zadania"])
+    if grupy_zadan:
+        bez_osob = set(grupy_zadan) == {"Nieprzypisane"}
+        zadania_html = "<div class='zadania'><h2>📋 Zadania</h2>"
+        for osoba, pozycje in grupy_zadan.items():
+            if not bez_osob:
+                zadania_html += f"<h3>{osoba}</h3>"
+            zadania_html += "<ul>"
+            for poz in pozycje:
+                czas = f" <em>{poz['czas']}</em>" if poz["czas"] else ""
+                zadania_html += f"<li>{poz['tresc']}{czas}</li>"
+            zadania_html += "</ul>"
+        zadania_html += "</div>"
 
     # Szablon HTML
     html_content = f"""
@@ -2339,6 +2105,12 @@ async def generate_pdf(note, notatka_id, context):
         white-space: pre-wrap;
     }
 
+    .zadania h3 {
+        margin: 14px 0 4px;
+        font-size: 13px;
+        color: #555;
+    }
+
     .zadania ul {
         list-style-type: none;
         padding-left: 0;
@@ -2420,7 +2192,6 @@ def main():
                 MessageHandler(filters.VOICE | filters.AUDIO, handle_additional_voice),
                 CallbackQueryHandler(button_handler)
             ],
-            ASKING_ANALYSIS: [CallbackQueryHandler(button_handler)],
             WAITING_CONFIRMATION: [CallbackQueryHandler(button_handler)],
             EDITING_TEMAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_temat)],
             WAITING_PHOTOS: [

@@ -111,6 +111,27 @@ class Zadanie(Base):
         return f"<Zadanie(id={self.id}, {status} '{self.zadanie}')>"
 
 
+def zadania_do_modelu(zadania_list):
+    """
+    Zamienia listę zadań na obiekty Zadanie, przyjmując oba formaty.
+
+    Nowy prompt zwraca obiekty {osoba, tresc, czas}; starsze notatki
+    i ręczne edycje nadal dają zwykłe napisy. Puste treści odpadają.
+    """
+    modele = []
+    for pozycja in zadania_list or []:
+        if isinstance(pozycja, dict):
+            tresc = (pozycja.get("tresc") or "").strip()
+            osoba = pozycja.get("osoba") or None
+            czas = pozycja.get("czas") or None
+        else:
+            tresc, osoba, czas = str(pozycja).strip(), None, None
+
+        if tresc:
+            modele.append(Zadanie(zadanie=tresc, osoba=osoba, czas_w_nagraniu=czas))
+    return modele
+
+
 class Database:
     """Klasa zarządzająca bazą danych (SQLite lub PostgreSQL/Supabase)"""
 
@@ -164,7 +185,7 @@ class Database:
             opis: Szczegółowy opis
             transkrypcja: Pełna transkrypcja audio
             audio_file_id: ID pliku audio w Telegram
-            zadania_list: Lista zadań (strings)
+            zadania_list: Lista zadań — słowniki {osoba, tresc, czas} albo napisy
             embedding_vector: Wektor embedding dla semantic search (list)
             photo_file_ids: Lista Telegram file_id zdjęć (strings)
             cost_data: Dict z danymi o kosztach API {
@@ -272,20 +293,7 @@ class Database:
         )
 
         # Dodaj zadania jeśli są
-        if zadania_list:
-            for pozycja in zadania_list:
-                # Nowy prompt zwraca obiekty {osoba, tresc, czas}; starsze
-                # ścieżki i notatki edytowane ręcznie nadal dają zwykłe napisy.
-                if isinstance(pozycja, dict):
-                    tresc = (pozycja.get("tresc") or "").strip()
-                    osoba = (pozycja.get("osoba") or None)
-                    czas = (pozycja.get("czas") or None)
-                else:
-                    tresc, osoba, czas = str(pozycja).strip(), None, None
-
-                if tresc:
-                    notatka.zadania.append(
-                        Zadanie(zadanie=tresc, osoba=osoba, czas_w_nagraniu=czas))
+        notatka.zadania.extend(zadania_do_modelu(zadania_list))
 
         self.session.add(notatka)
         self.session.commit()
@@ -305,7 +313,7 @@ class Database:
             temat: Nowy temat (jeśli None - bez zmian)
             opis: Nowy opis (jeśli None - bez zmian)
             transkrypcja: Nowa transkrypcja (jeśli None - bez zmian)
-            zadania_list: Nowa lista zadań - ZASTĘPUJE stare zadania
+            zadania_list: Nowa lista zadań (jak wyżej) - ZASTĘPUJE stare zadania
             embedding_vector: Nowy wektor embedding
             additional_cost_data: Dict z dodatkowymi kosztami do dodania {
                 "audio_duration_seconds": int,  # będzie dodane do obecnego
@@ -388,11 +396,10 @@ class Database:
             for zadanie in notatka.zadania:
                 self.session.delete(zadanie)
 
-            # Dodaj nowe zadania
-            for zadanie_text in zadania_list:
-                if zadanie_text.strip():
-                    zadanie = Zadanie(zadanie=zadanie_text.strip())
-                    notatka.zadania.append(zadanie)
+            # Dodaj nowe zadania. Ten sam helper co przy tworzeniu notatki —
+            # bez niego edycja nagraniem wysypywała się na słownikach z GPT
+            # i gubiła osobę odpowiedzialną oraz znacznik czasu.
+            notatka.zadania.extend(zadania_do_modelu(zadania_list))
 
         # Aktualizuj koszty - DODAJEMY do istniejących
         if additional_cost_data:
